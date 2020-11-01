@@ -19,6 +19,7 @@
 #include "opencv2/highgui/highgui.hpp"
 
 #include <iostream>
+#include <algorithm>
 #include <cmath>
 
 using namespace cv;
@@ -28,7 +29,7 @@ using namespace std;
 int nb_points = 0;
 
 Mat MapCurveImage512;
-Mat image, color_img;
+Mat image, color_img, result_img;
 Point    SrcPtInt[(int)MaxPoints];
 unsigned char LUtable[256];
 
@@ -42,6 +43,35 @@ void help()
          "Map values x of the input image to values y of an output image.\n"
          "Call:\n"
          "./image Image [image-name Default: fruits.jpg]\n" << endl;
+}
+
+void apply_LUT()
+{
+    CV_Assert(result_img.depth() == CV_8U);
+    CV_Assert(color_img.depth() == CV_8U);
+
+    int channels = result_img.channels();
+
+    int nRows = result_img.rows;
+    int nCols = result_img.cols * channels;
+
+//    if (result_img.isContinuous())
+//    {
+//        nCols *= nRows;
+//        nRows = 1;
+//    }
+
+    int i,j;
+    uchar* rp, *cp;
+    for( i = 0; i < nRows; ++i)
+    {
+        rp = result_img.ptr<uchar>(i);
+        cp = color_img.ptr<uchar>(i);
+        for ( j = 0; j < nCols; ++j)
+        {
+            rp[j] = LUtable[cp[j]];
+        }
+    }
 }
 
 void on_mouse( int event, int x, int y, int flags, void* param )
@@ -62,26 +92,33 @@ void on_mouse( int event, int x, int y, int flags, void* param )
             // determine gamma coefficient
             // (want to cheat? see end of file)
 
+            double gamma = log((511 - y)) / log(x);
 
-            double slope = (double)(511.0-y)/x;
+            cout << gamma;
 
             // create the LUT for that curve function and
             // draw the gamma curve in the MapCurveimage (pixelwise)
             // your code for the gamma curve and color transform (instead of or additionally to the following line)
-            line(MapCurveImage512, Point(0,511),  Point((x*511.0)/(511.0-y),0), CV_RGB(255, 255, 255));	 // line example
+            // line example
 
             for (int i=0; i<256; i++)
             {
-                LUtable[i] = i*slope;
+                LUtable[i] = clamp((int) pow(i, gamma), 0, 255);
             }
+
+            for(int ix=0; ix<255; ix+=1){
+                line(MapCurveImage512, Point(2*ix,511 - 2*LUtable[ix]),  Point(2*(ix+1), 511 - 2*LUtable[ix+1]), CV_RGB(255, 255, 255));
+            }
+
             // use the lookup table (LUT) to map the input image to the result image
             // use the same LUT for each color channel (or fantasize)
+            apply_LUT();
 
             // show non-linear mapping curve
             imshow("GreyCurve", MapCurveImage512);
 
             // show the result
-            imshow( "result image", color_img);
+            imshow( "result image", result_img);
         }
             break;
     }
@@ -95,6 +132,7 @@ int main( int argc, char** argv )
     char* filename = argc == 2 ? argv[1] : (char*)"../images/fruits.jpg";
     image = imread(filename, 1);
     color_img = image.clone();
+    result_img = image.clone();
 
     namedWindow( "GreyCurve");
     namedWindow( "Fruits!");
